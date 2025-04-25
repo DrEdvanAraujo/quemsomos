@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Galeria de Perfis 360° com Filtros</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            font-family: sans-serif;
+            overflow: hidden; /* Prevent scrollbars */
+            background-color: #05050a; /* Dark background for stars */
+            color: #e0e0e0;
+        }
+        #container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%; /* Full width initially */
+            height: 100%;
+            cursor: grab; /* Indicate interactivity */
+            transition: width 0.3s ease-in-out; /* Animate width change */
+        }
+        #container.panel-open {
+            width: calc(100% - 300px); /* Adjust width when panel is open */
+        }
+        #container:active {
+            cursor: grabbing;
+        }
+        .modal {
+            position: fixed; /* Use fixed to stay relative to viewport */
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%); /* Center the modal */
+            background: rgba(30, 30, 35, 0.97); /* Slightly more opaque */
+            color: #e0e0e0;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.7);
+            z-index: 100; /* Ensure modal is above panel */
+            max-width: 500px; /* Slightly wider for motivation text */
+            width: 90%; /* Responsive width */
+            max-height: 90vh; /* Allow slightly more height */
+            overflow-y: auto; /* Add scroll if content overflows */
+            display: none; /* Hidden by default */
+            border: 1px solid #444;
+        }
+        .modal h2 {
+            margin-top: 0;
+            color: #00bfa5; /* Accent color */
+            border-bottom: 1px solid #555;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+        .modal p {
+            margin-bottom: 12px; /* Slightly more spacing */
+            line-height: 1.6; /* Improve readability */
+        }
+        .modal strong {
+            color: #bdbdbd;
+            min-width: 140px; /* Wider label */
+            display: inline-block;
+            vertical-align: top; /* Align label top */
+        }
+         .modal span, .modal ul {
+             display: inline-block;
+             max-width: calc(100% - 150px); /* Prevent text overflow */
+             vertical-align: top;
+         }
+        .close-btn {
+            position: absolute;
+            top: 10px; /* Closer to edge */
+            right: 15px;
+            cursor: pointer;
+            font-size: 28px; /* Slightly larger */
+            font-weight: bold;
+            color: #aaa;
+            transition: color 0.2s;
+            line-height: 1;
+        }
+        .close-btn:hover {
+            color: #fff;
+        }
+        .modal ul { list-style: none; padding-left: 0; margin-left: 0; margin-top: 0; margin-bottom: 10px; } /* Adjusted list margin */
+        .modal li { margin-bottom: 3px; font-size: 0.95em; color: #ccc; }
+        .modal li::before { content: "- "; color: #00bfa5; margin-right: 5px; }
+
+        /* --- Filter Panel Styles --- */
+        #filterPanel {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 300px; /* Panel width */
+            height: 100vh;
+            background-color: rgba(25, 25, 30, 0.95); /* Dark background */
+            box-shadow: -5px 0 15px rgba(0,0,0,0.5);
+            z-index: 50;
+            transform: translateX(0); /* Start visible */
+            transition: transform 0.3s ease-in-out, width 0.3s ease-in-out;
+            display: flex;
+            flex-direction: column;
+            border-left: 1px solid #444;
+        }
+        #filterPanel.collapsed {
+            transform: translateX(calc(100% - 40px)); /* Hide most of it, leave handle */
+            width: 300px; /* Keep original width for calculation, just translate it */
+        }
+        #toggleFilters {
+            position: absolute;
+            left: 0px;
+            top: 50%;
+            transform: translateY(-50%) translateX(-100%); /* Position left of the panel */
+            writing-mode: vertical-rl; /* Vertical text */
+            text-orientation: mixed;
+            background-color: #00bfa5;
+            color: #111;
+            border: none;
+            padding: 15px 8px;
+            cursor: pointer;
+            font-weight: bold;
+            border-radius: 5px 0 0 5px; /* Rounded corners on the left */
+            font-size: 14px;
+            box-shadow: -2px 0 5px rgba(0,0,0,0.3);
+            z-index: 1; /* Ensure it's clickable */
+        }
+        #filterContent {
+            padding: 20px 15px;
+            overflow-y: auto; /* Allow scrolling if filters exceed height */
+            flex-grow: 1; /* Take remaining vertical space */
+            opacity: 1;
+            transition: opacity 0.2s ease-in-out;
+        }
+        #filterPanel.collapsed #filterContent {
+             opacity: 0; /* Hide content smoothly when collapsed */
+             pointer-events: none; /* Prevent interaction when hidden */
+        }
+
+        .filter-section {
+            margin-bottom: 20px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 15px;
+        }
+        .filter-section:last-of-type {
+             border-bottom: none; /* Remove border from last section */
+        }
+        .filter-section h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #00bfa5;
+            font-size: 1em;
+            text-transform: uppercase;
+        }
+        .filter-option {
+            display: block; /* Each checkbox on new line */
+            margin-bottom: 8px;
+            font-size: 0.9em;
+        }
+        .filter-option label {
+            margin-left: 8px;
+            cursor: pointer;
+            color: #ccc;
+            transition: color 0.2s;
+        }
+        .filter-option input[type="checkbox"] {
+            cursor: pointer;
+            accent-color: #00bfa5; /* Color the checkbox */
+            vertical-align: middle; /* Align checkbox better */
+        }
+         .filter-option label:hover {
+             color: #fff;
+         }
+         #resetFilters {
+             background-color: #555;
+             color: white;
+             border: none;
+             padding: 8px 15px;
+             border-radius: 4px;
+             cursor: pointer;
+             margin-top: 10px;
+             transition: background-color 0.2s;
+             width: 100%; /* Make button full width */
+         }
+         #resetFilters:hover {
+             background-color: #777;
+         }
+
+    </style>
+    <!-- Import map -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.148.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.148.0/examples/jsm/"
+        }
+      }
+    </script>
+</head>
+<body>
+    <div id="container"></div>
+
+<!-- Música de fundo com YouTube (oculto) -->
+    <div style="display:none;">
+      <iframe id="bgMusic" width="0" height="0" src="https://www.youtube.com/embed/OO2kPK5-qno?autoplay=1&loop=1&playlist=OO2kPK5-qno&mute=1" frameborder="0" allow="autoplay"></iframe>
+    </div>
+	
+    <!-- Filter Panel -->
+    <div id="filterPanel">
+        <button id="toggleFilters">FILTROS</button>
+        <div id="filterContent">
+            <div class="filter-section" id="filterProfession">
+
+                <h3>Profissão</h3>
+                <!-- Options will be populated by JS -->
+            </div>
+            <div class="filter-section" id="filterPicsKnown">
+                <h3>Conhece PICS</h3>
+                 <div class="filter-option">
+                    <input type="checkbox" id="picsKnown_Sim" value="Sim" name="pics_known">
+                    <label for="picsKnown_Sim">Sim</label>
+                 </div>
+                 <div class="filter-option">
+                    <input type="checkbox" id="picsKnown_Não" value="Não" name="pics_known">
+                    <label for="picsKnown_Não">Não</label>
+                 </div>
+            </div>
+            <div class="filter-section" id="filterPicsPractice">
+                <h3>Prática/Formação PICS</h3>
+                <!-- Options will be populated by JS -->
+            </div>
+            <button id="resetFilters">Limpar Filtros</button>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal" id="profileModal">
+        <span class="close-btn" onclick="closeModal()">×</span>
+        <div id="profileContent"></div>
+    </div>
+
+    <script type="module"> // Use type="module"
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- Constants for Appearance States ---
+        const OPACITY_DEFAULT = 1.0;
+        const OPACITY_UNLIT = 0.25; // More dimmed
+        const EMISSIVE_DEFAULT = 0x000000;
+        const EMISSIVE_LIT = 0x333333; // Subtle glow for filtered items
+
+        // --- Profile Data (with Motivation) ---
+        const profiles = [
+          { initials: "ASRCS", fullName: "Alice Silva Reis Correia de Souza", motivation: "Atualizações", gender: "Mulher Cis", race: "Parda", disability: "Não", disability_type: null, profession: "Fisioterapeuta", pics_known: "Sim", pics_list: ["Auriculoterapia"], pics_practice: ["Formação/Certificação", "Praticante habitual"], health_condition: "Não", medication: "Não (medicamento)", supplement: "Não (suplemento/vitamina)" },
+          { initials: "ARVB", fullName: "Aline Renata Vidreira Batista", motivation: "Aprender sobre as principais PICS", gender: "Mulher Cis", race: "Parda", disability: "Não", disability_type: null, profession: "Enfermeira", pics_known: "Não", pics_list: ["Não"], pics_practice: ["Não pratica"], health_condition: "Não", medication: "Sim (medicamento)", supplement: "Sim (suplemento/vitamina)" },
+          { initials: "MWP", fullName: "Marcela Wiering Pinto", motivation: "Sempre gostei das práticas integrativas de saúde", gender: "Mulher Cis", race: "Branca", disability: "Não", disability_type: null, profession: "Cirurgiã Dentista", pics_known: "Sim", pics_list: ["Fitoterapia"], pics_practice: ["Não pratica"], health_condition: "Não", medication: "Não (medicamento)", supplement: "Sim (suplemento/vitamina)" },
+          { initials: "PDLA", fullName: "PATRICIA DANTAS LIMA ALBUQUERQUE", motivation: "Ajudar a comunidade. Espero aprender práticas pra aplicar no dia-a-dia", gender: "Mulher Cis", race: "Branca", disability: "Não", disability_type: null, profession: "Médica", pics_known: "Não", pics_list: ["Não"], pics_practice: ["Não pratica"], health_condition: "Não", medication: "Não (medicamento)", supplement: "Sim (suplemento/vitamina)" },
+          { initials: "FVBC", fullName: "Fabiana Vanni de Brito Carvalho", motivation: "Aprimorar minha prática clínica", gender: "Mulher Cis", race: "Branca", disability: "Sim", disability_type: "Física", profession: "Enfermeira", pics_known: "Sim", pics_list: ["Auriculoterapia"], pics_practice: ["Formação/Certificação", "Praticante habitual"], health_condition: "Artrose coxo-femural", medication: "Não (medicamento)", supplement: "Sim (suplemento/vitamina)" },
+          { initials: "TML", fullName: "TACILA MACHADO LEVI", motivation: "APRENDIZADO E SOMAR NA MELHORIA DA QUALIDADE DE VIDA DO PACIENTE", gender: "Mulher Cis", race: "Parda", disability: "Não", disability_type: null, profession: "Enfermeira", pics_known: "Não", pics_list: ["Nenhuma"], pics_practice: ["Não pratica"], health_condition: "Ansiedade", medication: "Não (medicamento)", supplement: "Sim (suplemento/vitamina)" },
+          { initials: "LCA", fullName: "Lorena de Carvalho Almeida", motivation: "Espero aprender outras práticas para que possa aplicar nos pacientes e em mim mesma", gender: "Mulher Cis", race: "Branca", disability: "Não", disability_type: null, profession: "Enfermeira", pics_known: "Sim", pics_list: ["Auriculoterapia", "Hipnose"], pics_practice: ["Formação/Certificação", "Praticante habitual"], health_condition: "Hipotiroidismo de Hashimoto", medication: "Sim (medicamento)", supplement: "Não (suplemento/vitamina)" },
+          { initials: "CSC", fullName: "CINTIA SANTOS CONCEIÇÃO", motivation: "AMPLIAR OFERTA DE CUIDADO AOS USUÁRIOS DO SUS", gender: "Mulher Cis", race: "Branca", disability: "Não", disability_type: null, profession: "Enfermeira", pics_known: "Sim", pics_list: ["Acupuntura", "Reiki", "Aromaterapia"], pics_practice: ["Não pratica"], health_condition: "Não", medication: "Não (medicamento)", supplement: "Sim (suplemento/vitamina)" },
+          { initials: "SCOG", fullName: "Sílvia Carla Oliveira Gomes", motivation: "Conhecer/aprofundar conhecimentos sobre PICS", gender: "Mulher Cis", race: "Parda", disability: "Não", disability_type: null, profession: "Enfermeira", pics_known: "Sim", pics_list: ["Auriculoterapia", "Aromaterapia"], pics_practice: ["Formação/Certificação", "Praticante habitual"], health_condition: "Não", medication: "Sim (medicamento)", supplement: "Sim (suplemento/vitamina)" },
+          { initials: "LRG", fullName: "Lorena do Rosario Gomes", motivation: "Ampliar o repertório para poder aplicar mais técnicas no meu dia a dia", gender: "Mulher Cis", race: "Parda", disability: "Não", disability_type: null, profession: "Médica", pics_known: "Sim", pics_list: ["Auriculoterapia", "Qi Gong (MTC)", "Naturopatia"], pics_practice: ["Formação/Certificação"], health_condition: "Sintomas ansiosos/depressivos", medication: "Sim (medicamento)", supplement: "Sim (suplemento/vitamina)" },
+          { initials: "TBAS", fullName: "Thaís Bichara Alves da Silva", motivation: "Conhecer mais as PICS e poder aplicar nos meus pacientes", gender: "Mulher Cis", race: "Parda", disability: "Não", disability_type: null, profession: "Médica de Família e Comunidade", pics_known: "Sim", pics_list: ["Auriculoterapia"], pics_practice: ["Não pratica"], health_condition: "xxx", medication: "Não (medicamento)", supplement: "Não (suplemento/vitamina)" },
+          { initials: "ROQ", fullName: "Rosane de Oliveira Queiroz", motivation: "Conhecer mais sobre as Pics", gender: "Mulher Cis", race: "Parda", disability: "Não", disability_type: null, profession: "Técnico Laboratório", pics_known: "Sim", pics_list: ["Auriculoterapia"], pics_practice: ["Formação/Certificação", "Praticante esporádico"], health_condition: "Não", medication: "Não (medicamento)", supplement: "Não (suplemento/vitamina)" },
+          { initials: "SOL", fullName: "Shuilene de Oliveira Luz", motivation: "Obter mais conhecimento para praticar as pics", gender: "Mulher Cis", race: "Preta", disability: "Não", disability_type: null, profession: "Odontóloga", pics_known: "Sim", pics_list: ["Aromaterapia", "Reflexoterapia", "Auriculoterapia"], pics_practice: ["Formação/Certificação"], health_condition: "Não", medication: "Não (medicamento)", supplement: "Não (suplemento/vitamina)" },
+          { initials: "CBS", fullName: "Carolina de Belém Santiago", motivation: "Adquirir conhecimento sobre essas práticas", gender: "Mulher Cis", race: "Preta", disability: "Não", disability_type: null, profession: "Enfermeira", pics_known: "Sim", pics_list: ["Acupuntura", "Auriculoterapia"], pics_practice: ["Praticante esporádico"], health_condition: "HAS", medication: "Sim (medicamento)", supplement: "Não (suplemento/vitamina)" },
+          { initials: "DASC", fullName: "Daiana Araújo Soares da Cunha", motivation: "Conhecer mais práticas para aplicar no dia a dia", gender: "Mulher Cis", race: "Branca", disability: "Não", disability_type: null, profession: "Fisioterapeuta/Emulti AB", pics_known: "Sim", pics_list: ["Auriculoterapia", "Acupuntura", "Aromaterapia"], pics_practice: ["Formação/Certificação", "Praticante habitual"], health_condition: "Não", medication: "Não (medicamento)", supplement: "Não (suplemento/vitamina)" },
+          { initials: "RSSG", fullName: "Rosemary serra de Santana Gomes", motivation: "Conhecimento para práticas com segurança", gender: "Mulher Cis", race: "Parda", disability: "Sim", disability_type: "Fibromialgia", profession: "ACS", pics_known: "Sim", pics_list: ["Aromaterapia", "Acupuntura", "Relaxamento"], pics_practice: ["Praticante habitual"], health_condition: "Não", medication: "Sim (medicamento)", supplement: "Não (suplemento/vitamina)" },
+          { initials: "JSFS", fullName: "Joelma Souza Fialho Santos", motivation: "Aprender para levar aos meus pacientes.", gender: "Mulher Cis", race: "Preta", disability: "Não", disability_type: null, profession: "Agente de saúde", pics_known: "Sim", pics_list: ["Auriculoterapia"], pics_practice: ["Não pratica"], health_condition: "Hipotireoidismo", medication: "Sim (medicamento)", supplement: "Não (suplemento/vitamina)" },
+          { initials: "AAS", fullName: "Andreia Andrade dos Santos", motivation: "Conhecer para aplicar na comunidade", gender: "Mulher Cis", race: "Parda", disability: "Não", disability_type: null, profession: "Enfermeira", pics_known: "Sim", pics_list: ["Auriculoterapia", "Ventosa terapia"], pics_practice: ["Não pratica"], health_condition: "Não", medication: "Não (medicamento)", supplement: "Sim (suplemento/vitamina)" },
+          { initials: "JAAS", fullName: "Joana Angélica Almeida de Souza", motivation: "Espero aprender para poder ajudar aos meus pacientes", gender: "Mulher Cis", race: "Parda", disability: "Não", disability_type: null, profession: "Tecnica em enfermagem", pics_known: "Sim", pics_list: ["Aromaterapia", "Ventosaterapia", "Auriculoterapia"], pics_practice: ["Não pratica"], health_condition: "Protusão cervical", medication: "Não (medicamento)", supplement: "Sim (suplemento/vitamina)" },
+          { initials: "MSCAT", fullName: "Maria do Socorro Cruz Aragão Torres", motivation: "Oferecer cuidado integral", gender: "Mulher Cis", race: "Parda", disability: "Não", disability_type: null, profession: "Enfermeira", pics_known: "Sim", pics_list: ["Fitoterapia"], pics_practice: ["Praticante esporádico"], health_condition: "Não", medication: "Sim (medicamento)", supplement: "Sim (suplemento/vitamina)" },
+          { initials: "ASS", fullName: "Ariela Santos Silva", motivation: "Pretendo aprender técnicas integrativas que auxiliem na saúde mental dos pacientes", gender: "Mulher Cis", race: "Preta", disability: "Não", disability_type: null, profession: "Enfermeira", pics_known: "Sim", pics_list: ["Imposição com as mãos"], pics_practice: ["Não pratica"], health_condition: "Não", medication: "Não (medicamento)", supplement: "Sim (suplemento/vitamina)" },
+          { initials: "GBJ", fullName: "Giovana Bina Jabaly", motivation: "Melhoria qualidade vida pessoal e profissional", gender: "Mulher Cis", race: "Preta", disability: "Não", disability_type: null, profession: "Enfermeira", pics_known: "Não", pics_list: ["Não"], pics_practice: ["Não pratica"], health_condition: "Não", medication: "Não (medicamento)", supplement: "Não (suplemento/vitamina)" },
+          { initials: "HDGB", fullName: "Heliane Duarte Guimarães Beserra", motivation: "Novos conhecimentos", gender: "Mulher Cis", race: "Parda", disability: "Não", disability_type: null, profession: "Enfermeira", pics_known: "Não", pics_list: ["Não"], pics_practice: ["Não pratica"], health_condition: "Não", medication: "Não (medicamento)", supplement: "Não (suplemento/vitamina)" },
+          { initials: "ESTS", fullName: "Eliade Selma Tavares de Souza", motivation: "Ter mais recursos e informações sobre a saúde mental", gender: "Mulher Cis", race: "Preta", disability: "Não", disability_type: null, profession: "Profissional de atendimento integral- Psicologo emult", pics_known: "Sim", pics_list: ["Fitoterapia", "Arte terapia", "Aromaterapia"], pics_practice: ["Praticante esporádico"], health_condition: "Não", medication: "Não (medicamento)", supplement: "Não (suplemento/vitamina)" },
+          { initials: "NPB", fullName: "Naiara Pereira Borges", motivation: "Aprimorar/conhecer conhecimento", gender: "Mulher Cis", race: "Preta", disability: "Não", disability_type: null, profession: "TEC em enfermagem", pics_known: "Sim", pics_list: ["Auriculoterapia"], pics_practice: ["Formação/Certificação"], health_condition: "Endometriose/condromalacia patelar grau 4", medication: "Sim (medicamento)", supplement: "Não (suplemento/vitamina)" },
+          { initials: "VADN", fullName: "Valdir Andrade do Nascimento", motivation: "Conhecer novas práticas integrativas e complementares", gender: "Homem Cis", race: "Preta", disability: "Não", disability_type: null, profession: "ACS", pics_known: "Não", pics_list: ["Não"], pics_practice: ["Não pratica"], health_condition: "Não", medication: "Não (medicamento)", supplement: "Não (suplemento/vitamina)" },
+          { initials: "TAR", fullName: "Thatiane Andrade Reis", motivation: "Aprender mais sobre as PICs de modo a ter mais recursos para ofertar aos pacientes.", gender: "Mulher Cis", race: "Parda", disability: "Não", disability_type: null, profession: "Medica", pics_known: "Sim", pics_list: ["Acupuntura"], pics_practice: ["Formação/Certificação"], health_condition: "Não", medication: "Não (medicamento)", supplement: "Não (suplemento/vitamina)" },
+          { initials: "RCVJE", fullName: "Rita de Cássia Valentim de Jesus Encarnação", motivation: "Obter conhecimento e habilidades para a prática profissional", gender: "Mulher Cis", race: "Preta", disability: "Não", disability_type: null, profession: "Enfermeira", pics_known: "Sim", pics_list: ["Auriculoterapia"], pics_practice: ["Não pratica"], health_condition: "Não", medication: "Não (medicamento)", supplement: "Não (suplemento/vitamina)" },
+          { initials: "NCC", fullName: "Nadja do céu carvalho", motivation: "Qualificação de práticas que estimulam o bem-estar", gender: "Mulher Cis", race: "Parda", disability: "Não", disability_type: null, profession: "Agente comunitária de saúde", pics_known: "Sim", pics_list: ["Apiterapia"], pics_practice: ["Praticante esporádico"], health_condition: "Não", medication: "Não (medicamento)", supplement: "Não (suplemento/vitamina)" },
+          { initials: "FTB", fullName: "Francislene Torres Batista", motivation: "Conhecer coisas novas e repassar essas informações e podermos ajudar nossos pacientes", gender: "Mulher Cis", race: "Parda", disability: "Não", disability_type: null, profession: "Técnica de Enfermagem", pics_known: "Não", pics_list: ["Não conheço"], pics_practice: ["Não pratica"], health_condition: "Dores musculares", medication: "Não (medicamento)", supplement: "Sim (suplemento/vitamina)" },
+          { initials: "FRMC", fullName: "Fernanda Rebouças Maia Costa", motivation: "Conhecer um pouco mais de todas as pics.", gender: "Mulher Cis", race: "Branca", disability: "Não", disability_type: null, profession: "Psicóloga - Nasf", pics_known: "Sim", pics_list: ["Auriculoterapia"], pics_practice: ["Formação/Certificação"], health_condition: "Sim, em recuperação de Sindrome de Burnout", medication: "Sim (medicamento)", supplement: "Sim (suplemento/vitamina)" },
+          { initials: "CNMC", fullName: "Carolina Nunes Martins Cerqueira", motivation: "Aprimorar minha prática e novos conhecimentos", gender: "Mulher Cis", race: "Branca", disability: "Não", disability_type: null, profession: "Fisioterapeuta", pics_known: "Sim", pics_list: ["Aromaterapia", "Meditação", "Yoga"], pics_practice: ["Praticante habitual"], health_condition: "Não", medication: "Sim (medicamento)", supplement: "Não (suplemento/vitamina)" },
+          { initials: "CACC", fullName: "Celina Amado Chetto Coutinho", motivation: "Aprender mais sobre as Pics e poder ampliar a atuação", gender: "Mulher Cis", race: "Branca", disability: "Não", disability_type: null, profession: "Assistente Social", pics_known: "Sim", pics_list: ["Acupuntura", "Auriculoterapia", "Terapia de Florais", "Imposição de mãos", "Osteopatia", "Yoga"], pics_practice: ["Praticante habitual"], health_condition: "Dor neuropatica", medication: "Sim (medicamento)", supplement: "Não (suplemento/vitamina)" },
+          { initials: "MFM", fullName: "Marta Ferreira Menezes", motivation: "Conhecer e comproender os benefícios das PICS", gender: "Mulher Cis", race: "Preta", disability: "Não", disability_type: null, profession: "Psicóloga e preceptora FESFSUS", pics_known: "Sim", pics_list: ["AURICULOTERAPIA"], pics_practice: ["Formação/Certificação"], health_condition: "Não", medication: "Não (medicamento)", supplement: "Sim (suplemento/vitamina)" },
+          { initials: "MBM", fullName: "Marly Bispo de Moraes", motivation: "Aprender mais sobre as PICS e multiplicar os conhecimentos", gender: "Mulher Cis", race: "Parda", disability: "Não", disability_type: null, profession: "Farmacêutica", pics_known: "Sim", pics_list: ["Fitoterapia"], pics_practice: ["Não pratica"], health_condition: "Hipertensão", medication: "Sim (medicamento)", supplement: "Não (suplemento/vitamina)" },
+          { initials: "ACS", fullName: "Anne Caroline Santos", motivation: "Ampliar meus conhecimentos", gender: "Mulher Cis", race: "Preta", disability: "Não", disability_type: null, profession: "Psicologia / Preceptora", pics_known: "Sim", pics_list: ["Auriculoterapia"], pics_practice: ["Formação/Certificação", "Praticante habitual", "Praticante esporádico"], health_condition: "Não", medication: "Não (medicamento)", supplement: "Sim (suplemento/vitamina)" },
+          { initials: "PRSC", fullName: "PAULO RICARDO SILVA CERQUEIRA", motivation: "FUI CONVOCADO A PARTICIPAR", gender: "Homem Cis", race: "Branca", disability: "Não", disability_type: null, profession: "CIRURGIÃO DENTISTA", pics_known: "Não", pics_list: ["Não"], pics_practice: ["Não pratica"], health_condition: "Não", medication: "Não (medicamento)", supplement: "Não (suplemento/vitamina)" }
+        ];
+
+
+        // --- Three.js Setup ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); // alpha true for potentially transparent bg if needed
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        const container = document.getElementById('container');
+        container.appendChild(renderer.domElement);
+
+        // --- Lighting ---
+        const ambientLight = new THREE.AmbientLight(0x606060, 1.0); // Slightly brighter ambient
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2); // Slightly stronger directional
+        directionalLight.position.set(5, 10, 7.5);
+        scene.add(directionalLight);
+
+        // --- Controls ---
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.screenSpacePanning = false;
+        controls.minDistance = 3;
+        controls.maxDistance = 30;
+        controls.maxPolarAngle = Math.PI;
+        // ---> FIX: Explicitly set the orbit target to the center of the sphere <---
+        controls.target.set(0, 0, 0);
+
+        // --- Raycasting & Interaction State ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2(); // Normalized device coordinates (-1 to +1)
+        const interactiveObjects = [];
+        let selectedCube = null;
+        let activePointLight = null;
+        const clock = new THREE.Clock();
+
+        // --- Filter State ---
+        let activeFilters = {
+            profession: new Set(),
+            pics_known: new Set(),
+            pics_practice: new Set(),
+            disability: new Set()
+        };
+        let filtersAreActive = false; // Flag to check if any filter is set
+
+         // --- Profession Standardization ---
+         function standardizeProfession(originalProfession) {
+             if (!originalProfession) return "Não informado"; // Handle null/undefined cases
+             const prof = originalProfession.trim();
+
+             // Groupings based on request
+             if (['ACS', 'Agente comunitária de saúde', 'Agente de saúde'].includes(prof)) return 'Agente de Saúde (ACS)';
+             if (['Cirurgiã Dentista', 'CIRURGIÃO-DENTISTA', 'Odontóloga', 'CIRURGIÃO DENTISTA'].includes(prof)) return 'Cirurgião Dentista'; // Merged Odontóloga and fixed capitalization variation
+             if (['Fisioterapeuta', 'Fisioterapeuta/Emulti AB'].includes(prof)) return 'Fisioterapeuta';
+             if (['Medica', 'Médica', 'Médica de Família e Comunidade'].includes(prof)) return 'Médica';
+             if (['Profissional de atendimento integral- Psicologo emult', 'Psicologia / Preceptora', 'Psicóloga - Nasf', 'Psicóloga e preceptora FESFSUS'].includes(prof)) return 'Psicóloga';
+             if (['TEC em enfermagem', 'Tecnica em enfermagem', 'Técnica de Enfermagem'].includes(prof)) return 'Técnica de Enfermagem';
+             if (['Técnico Laboratório'].includes(prof)) return 'Técnica de Laboratório'; // Standardize this too
+             if (['Farmacêutica'].includes(prof)) return 'Farmacêutica'; // Standardize this too
+             if (['Assistente Social'].includes(prof)) return 'Assistente Social'; // Standardize this too
+
+             // Keep Enfermeira as is for now, as it's common and consistent
+             if (prof === 'Enfermeira') return 'Enfermeira';
+
+
+             // Return the original (trimmed) profession if it doesn't match any group
+             console.warn("Profissão não padronizada:", prof); // Log unhandled ones
+             return prof;
+         }
+
+
+        // --- Create Profile Cubes ---
+        const sphereRadius = 6;
+        const n = profiles.length;
+        const phi = Math.PI * (3. - Math.sqrt(5)); // Golden angle approximation
+
+        profiles.forEach((profile, i) => {
+            // Fibonacci sphere (even distribution)
+            const y = 1 - (i / (n - 1)) * 2; // y goes from 1 to -1
+            const radiusAtY = Math.sqrt(1 - y * y); // radius at y level
+            const theta = phi * i; // angle increments by golden angle
+            const x = Math.cos(theta) * radiusAtY;
+            const z = Math.sin(theta) * radiusAtY;
+            const position = new THREE.Vector3(x, y, z).multiplyScalar(sphereRadius);
+
+            // Create Texture
+            const canvas = document.createElement('canvas');
+            const size = 256; // Texture resolution
+            canvas.width = size; canvas.height = size;
+            const ctx = canvas.getContext('2d');
+
+            // Dynamic Color based on index
+            const bgColor = `hsl(${ (i / n) * 360 }, 80%, 50%)`; // Vary hue, keep saturation/lightness high
+            ctx.fillStyle = bgColor;
+            ctx.fillRect(0, 0, size, size);
+            ctx.fillStyle = 'white'; // Text color
+            ctx.font = `bold ${size * 0.25}px sans-serif`; // Adjust font size dynamically
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(profile.initials, size / 2, size / 2); // Center text
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
+
+            // Create Cube Mesh
+            const geometry = new THREE.BoxGeometry(1, 1, 1); // Cube dimensions
+            const material = new THREE.MeshStandardMaterial({
+                map: texture,
+                roughness: 0.6,
+                metalness: 0.1,
+                opacity: OPACITY_DEFAULT, // Use constant
+                transparent: true // Needed for opacity changes
+            });
+            const cube = new THREE.Mesh(geometry, material);
+            cube.position.copy(position);
+            cube.lookAt(0, 0, 0); // Make cube face the center
+            cube.userData = profile; // Store profile data directly on the mesh
+
+            scene.add(cube);
+            interactiveObjects.push(cube); // Add to list for raycasting
+        });
+
+        // --- Create Background Stars ---
+        let stars;
+        function createStars() {
+            const starQty = 5000;
+            const starVertices = [];
+            const starRadius = 50; // How far out the stars extend
+            for (let i = 0; i < starQty; i++) {
+                // Distribute stars spherically
+                const theta = THREE.MathUtils.randFloatSpread(360); // Random angle 1
+                const phi = THREE.MathUtils.randFloatSpread(360);   // Random angle 2
+                // Use cube root for more even volume distribution, prevents clustering at center
+                const dist = Math.cbrt(Math.random()) * starRadius;
+                const x = dist * Math.sin(theta) * Math.cos(phi);
+                const y = dist * Math.sin(theta) * Math.sin(phi);
+                const z = dist * Math.cos(theta);
+                starVertices.push(x, y, z);
+            }
+            const starsGeometry = new THREE.BufferGeometry();
+            starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+            const starsMaterial = new THREE.PointsMaterial({
+                color: 0xaaaaaa, size: 0.08, sizeAttenuation: true,
+                transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending // Additive blending looks nice for stars
+            });
+            stars = new THREE.Points(starsGeometry, starsMaterial);
+            scene.add(stars);
+        }
+        createStars();
+
+        // --- Camera Initial Position ---
+        camera.position.z = sphereRadius + 8; // Position camera outside the sphere
+
+        // --- Filter Panel Logic ---
+        const filterPanel = document.getElementById('filterPanel');
+        const filterContent = document.getElementById('filterContent');
+        const toggleFiltersBtn = document.getElementById('toggleFilters');
+        const resetFiltersBtn = document.getElementById('resetFilters');
+
+        function populateFilterOptions() {
+            const uniqueStandardizedProfessions = new Set();
+            const practices = new Set();
+            profiles.forEach(p => {
+                uniqueStandardizedProfessions.add(standardizeProfession(p.profession));
+                if (Array.isArray(p.pics_practice)) {
+                    p.pics_practice.forEach(prac => practices.add(prac.trim()));
+                } else if (p.pics_practice) {
+                    practices.add(p.pics_practice.trim());
+                }
+            });
+
+            // Populate Profession Filters
+            const professionContainer = document.getElementById('filterProfession');
+            professionContainer.innerHTML = '<h3>Profissão</h3>'; // Reset with header
+            [...uniqueStandardizedProfessions].sort().forEach(stdProf => {
+                const id = `prof_${stdProf.replace(/[^a-zA-Z0-9]/g, '')}`; // Create safe ID
+                professionContainer.innerHTML += `
+                    <div class="filter-option">
+                        <input type="checkbox" id="${id}" value="${stdProf}" name="profession">
+                        <label for="${id}">${stdProf}</label>
+                    </div>`;
+            });
+
+            // Populate PICS Practice Filters
+            const practiceContainer = document.getElementById('filterPicsPractice');
+            practiceContainer.innerHTML = '<h3>Prática/Formação PICS</h3>'; // Reset with header
+            // Filter out generic "no" answers and sort alphabetically
+            const relevantPractices = [...practices].filter(p => !["Não", "Nenhuma", "Não conheço", "Não pratica"].includes(p)).sort();
+             // Include "Não pratica" explicitly if it was present in the original data and desired as a filter option
+            if (practices.has("Não pratica")) {
+                 relevantPractices.push("Não pratica"); // Add it to the end or sort if needed
+            }
+            relevantPractices.forEach(prac => {
+                const id = `prac_${prac.replace(/[^a-zA-Z0-9]/g, '')}`; // Create safe ID
+                practiceContainer.innerHTML += `
+                    <div class="filter-option">
+                        <input type="checkbox" id="${id}" value="${prac}" name="pics_practice">
+                        <label for="${id}">${prac}</label>
+                    </div>`;
+            });
+
+            addFilterListeners(); // Attach listeners after creating checkboxes
+        }
+
+
+        function applyFilters() {
+            // Clear previous filter selections
+            activeFilters.profession.clear();
+            activeFilters.pics_known.clear();
+            activeFilters.pics_practice.clear();
+            activeFilters.disability.clear(); // Assuming you might add this filter later
+            filtersAreActive = false; // Reset flag
+
+            // Populate active filters based on checked boxes
+            filterContent.querySelectorAll('input[type="checkbox"]:checked').forEach(checkbox => {
+                const category = checkbox.name;
+                if (activeFilters[category]) {
+                    activeFilters[category].add(checkbox.value);
+                    filtersAreActive = true; // A filter is active
+                }
+            });
+
+            // Stop speech and remove light if the selected cube gets filtered out
+            if (selectedCube && filtersAreActive) {
+                 const profile = selectedCube.userData;
+                 let matches = checkProfileAgainstFilters(profile);
+                 if (!matches) {
+                    removeActiveLight(); // Also stops speech
+                 }
+            } else if (!filtersAreActive) {
+                 // If filters are cleared, ensure no lingering light if it wasn't the last clicked valid cube
+                 // removeActiveLight(); // Optional: uncomment to remove light on filter reset always
+            }
+
+
+            // Update cube appearance based on filters
+            interactiveObjects.forEach(cube => {
+                const profile = cube.userData;
+                let matches = checkProfileAgainstFilters(profile);
+
+                // Set appearance based on match and whether filters are active
+                if (filtersAreActive) {
+                    if (matches) {
+                        cube.material.opacity = OPACITY_DEFAULT;
+                        cube.material.emissive.setHex(EMISSIVE_LIT); // Highlight matching items
+                    } else {
+                        cube.material.opacity = OPACITY_UNLIT;
+                        cube.material.emissive.setHex(EMISSIVE_DEFAULT); // Dim non-matching items
+                    }
+                } else {
+                    // Reset to default appearance if no filters are active
+                    cube.material.opacity = OPACITY_DEFAULT;
+                    cube.material.emissive.setHex(EMISSIVE_DEFAULT);
+                }
+                 cube.material.needsUpdate = true; // Required for material changes to take effect
+            });
+        }
+
+        // Helper function to check if a single profile matches the current active filters
+        function checkProfileAgainstFilters(profile) {
+             let matches = true;
+
+             // Check profession filter
+             if (activeFilters.profession.size > 0) {
+                 const standardizedProf = standardizeProfession(profile.profession);
+                 if (!activeFilters.profession.has(standardizedProf)) {
+                     matches = false;
+                 }
+             }
+             // Check PICS known filter
+             if (matches && activeFilters.pics_known.size > 0 && !activeFilters.pics_known.has(profile.pics_known)) {
+                  matches = false;
+              }
+             // Check disability filter (if implemented)
+             if (matches && activeFilters.disability.size > 0 && !activeFilters.disability.has(profile.disability)) {
+                  matches = false;
+              }
+              // Check PICS practice filter (handles array or single string)
+              if (matches && activeFilters.pics_practice.size > 0) {
+                  let practiceMatch = false;
+                  const profilePractices = Array.isArray(profile.pics_practice)
+                      ? profile.pics_practice
+                      : (profile.pics_practice ? [profile.pics_practice] : []); // Ensure it's an array
+
+                  // Check if *any* of the profile's practices match *any* of the selected filter practices
+                  for (const activePrac of activeFilters.pics_practice) {
+                      if (profilePractices.some(pp => pp === activePrac)) {
+                          practiceMatch = true;
+                          break; // Found a match, no need to check further
+                      }
+                  }
+                  if (!practiceMatch) {
+                      matches = false;
+                  }
+              }
+            return matches;
+        }
+
+
+        function addFilterListeners() {
+            filterContent.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+                 // Remove previous listener to prevent duplicates if called multiple times
+                 checkbox.removeEventListener('change', applyFilters);
+                 checkbox.addEventListener('change', applyFilters);
+            });
+        }
+
+
+        toggleFiltersBtn.addEventListener('click', () => {
+            filterPanel.classList.toggle('collapsed');
+            container.classList.toggle('panel-open'); // Toggle class on container to adjust width
+             // Delay resize to allow CSS transition to finish
+             setTimeout(() => {
+                 onWindowResize();
+             }, 310); // Slightly longer than transition duration (0.3s)
+        });
+
+        resetFiltersBtn.addEventListener('click', () => {
+             // Uncheck all filter checkboxes
+             filterContent.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+                 checkbox.checked = false;
+             });
+             applyFilters(); // Re-apply filters (which will now be empty)
+        });
+
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate); // Request next frame
+            const elapsedTime = clock.getElapsedTime(); // Time since start
+
+            controls.update(); // Required if enableDamping is true
+
+            // Pulse the active light if it exists
+            if (activePointLight) {
+                const baseIntensity = 1.8;
+                const pulseAmplitude = 1.2;
+                const pulseSpeed = 3.5;
+                // Use sine wave for smooth pulsing effect
+                activePointLight.intensity = baseIntensity + pulseAmplitude * (0.5 + 0.5 * Math.sin(elapsedTime * pulseSpeed));
+            }
+
+            // Pulse the stars' opacity for a twinkling effect
+            if (stars) {
+                 const starPulseSpeed = 0.5;
+                 // Use sine wave for smooth pulsing
+                 stars.material.opacity = 0.6 + 0.4 * (0.5 + 0.5 * Math.sin(elapsedTime * starPulseSpeed + 5.0)); // Offset phase slightly
+                 stars.material.needsUpdate = true;
+            }
+
+            renderer.render(scene, camera); // Render the scene
+        }
+
+
+        // --- Modal Functions ---
+        const modal = document.getElementById('profileModal');
+        const profileContentDiv = document.getElementById('profileContent');
+
+        // --- TTS Setup ---
+        let voices = [];
+        let selectedVoiceIndex = 0; // To cycle through voices
+
+        function loadVoices() {
+            voices = speechSynthesis.getVoices().filter(voice => voice.lang.startsWith('pt')); // Filter for Portuguese
+             if (voices.length === 0 && 'onvoiceschanged' in speechSynthesis) {
+                 // Voices might load asynchronously, wait for the event
+                 speechSynthesis.onvoiceschanged = loadVoices;
+                 return;
+             }
+             if (voices.length === 0) {
+                console.warn("Nenhuma voz em português encontrada. A fala pode usar um padrão do sistema.");
+                // Fallback: Use any available voices if no Portuguese found
+                voices = speechSynthesis.getVoices();
+             }
+             console.log("Vozes disponíveis (Português ou Padrão):", voices.map(v => `${v.name} (${v.lang})`));
+        }
+
+        // Attempt initial load and set up listener for async loading
+        loadVoices();
+        // Some browsers require interaction before loading voices, this helps
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+            speechSynthesis.onvoiceschanged = loadVoices;
+        } else {
+             // Fallback timeout for browsers that might not fire the event reliably
+            setTimeout(loadVoices, 250);
+        }
+
+        function selectVoice(gender) {
+            if (voices.length === 0) {
+                console.warn("Tentando selecionar voz, mas nenhuma voz está carregada.");
+                loadVoices(); // Try reloading voices just in case
+                if (voices.length === 0) return null; // Still no voices
+            }
+
+            const targetLang = 'pt-BR';
+            // Prioritize Brazilian Portuguese voices
+            let preferredVoices = voices.filter(v => v.lang === targetLang);
+            if (preferredVoices.length === 0) {
+                 // Fallback to any Portuguese variant
+                 preferredVoices = voices.filter(v => v.lang.startsWith('pt'));
+            }
+             // If still no Portuguese voices, use any available voice as a last resort
+            if (preferredVoices.length === 0) {
+                 preferredVoices = voices;
+            }
+             if (preferredVoices.length === 0) {
+                 console.error("Nenhuma voz de TTS disponível no sistema.");
+                 return null; // Absolutely no voices found
+             }
+
+
+            let potentialVoice = null;
+
+            // Attempt to match gender based on common keywords in voice names (highly unreliable)
+            // This is very dependent on the OS/browser providing descriptive names
+            if (gender === 'Homem Cis') {
+                potentialVoice = preferredVoices.find(v => /masculino|male|homem|man|boy/i.test(v.name) && !/feminino|female|mulher|woman|girl/i.test(v.name));
+            } else if (gender === 'Mulher Cis') {
+                 potentialVoice = preferredVoices.find(v => /feminino|female|mulher|woman|girl/i.test(v.name) && !/masculino|male|homem|man|boy/i.test(v.name));
+            }
+
+            // If no gender match, or gender not specified, cycle through the preferred list
+            if (!potentialVoice) {
+                 potentialVoice = preferredVoices[selectedVoiceIndex % preferredVoices.length];
+                 selectedVoiceIndex++; // Move to next voice in the list for the next time
+            }
+
+             console.log(`Voz selecionada para ${gender || 'Gênero não especificado'}: ${potentialVoice?.name || 'Padrão do Sistema'} (${potentialVoice?.lang || 'N/A'})`);
+            return potentialVoice;
+        }
+
+        function speakText(text, gender) {
+            // Cancel any previous speech first to avoid overlap
+            speechSynthesis.cancel();
+
+            if (!text || typeof text !== 'string' || text.trim().length === 0) {
+                console.warn("Tentativa de falar texto vazio ou inválido.");
+                return;
+            }
+            if (typeof speechSynthesis === 'undefined') {
+                console.error("API de Síntese de Fala não suportada neste navegador.");
+                return;
+            }
+
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            const voice = selectVoice(gender);
+
+            if (voice) {
+                utterance.voice = voice;
+                utterance.lang = voice.lang; // Ensure language matches the selected voice
+            } else {
+                // Default to Brazilian Portuguese if no specific voice could be selected
+                utterance.lang = 'pt-BR';
+                console.warn("Usando voz padrão do sistema para pt-BR.");
+            }
+
+            utterance.pitch = 1; // Range: 0 to 2
+            utterance.rate = 1; // Range: 0.1 to 10
+            utterance.volume = 0.9; // Range: 0 to 1
+
+             // Add event listeners for debugging
+             utterance.onstart = () => console.log("TTS iniciado.");
+             utterance.onend = () => console.log("TTS finalizado.");
+             utterance.onerror = (event) => {
+                 console.error("Erro na síntese de fala:", event.error, "Texto:", text.substring(0, 100) + "...");
+             };
+             utterance.onboundary = (event) => { /* console.log(`TTS boundary: ${event.name} at char ${event.charIndex}`); */ }; // Can be noisy
+
+            // Speak the text
+            speechSynthesis.speak(utterance);
+        }
+
+
+        function showModal(profile) {
+             // Helper to format lists nicely in the modal (unchanged)
+             const formatList = (list) => {
+                  if (!Array.isArray(list) || list.length === 0 || ["Não", "Nenhuma", "Não conheço"].some(val => list.includes(val))) {
+                     const displayVal = Array.isArray(list) ? list.join(', ') : (list || 'Não informado');
+                     return `<span>${displayVal || 'Não informado'}</span>`;
+                  }
+                  return `<ul>${list.map(item => `<li>${item}</li>`).join('')}</ul>`;
+             };
+            // Populate modal content
+             profileContentDiv.innerHTML = `
+                 <h2>${profile.initials}</h2>
+                 <p><strong>Motivação:</strong> <span>${profile.motivation || 'Não informado'}</span></p>
+                 <p><strong>Gênero:</strong> <span>${profile.gender || 'Não informado'}</span></p>
+                 <p><strong>Cor/Raça:</strong> <span>${profile.race || 'Não informado'}</span></p>             
+                 <p><strong>Profissão:</strong> <span>${profile.profession || 'Não informado'}</span></p> <!-- Show original profession -->
+                 <p><strong>Conhece PICS:</strong> <span>${profile.pics_known || 'Não informado'}</span></p>
+                 ${profile.pics_known === 'Sim' ? `<p><strong>PICS Conhecidas:</strong> ${formatList(profile.pics_list)}</p>` : ''}
+                 <p><strong>Prática/Formação:</strong> ${formatList(profile.pics_practice)}</p>
+
+             `;
+            modal.style.display = 'block'; // Make modal visible
+
+            // --- TTS: Prepare and speak the text ---
+            // Construct a concise summary for speech synthesis
+            let textToSpeak = `Olá. Eu sou ${profile.gender || 'Gênero não informado'}. `;
+            textToSpeak += `Minha motivação é ${profile.motivation || 'não informada'}. `;
+            textToSpeak += `Eu sou ${standardizeProfession(profile.profession) || 'profissão não informada'}. `;
+
+            if (profile.pics_known === 'Sim') {
+                 textToSpeak += `Conheço PICS. `;
+                 // List known PICS if available and not generic "no" answers
+                 if (Array.isArray(profile.pics_list) && profile.pics_list.length > 0 && !["Não", "Nenhuma", "Não conheço"].includes(profile.pics_list[0])) {
+                     textToSpeak += `Como ${profile.pics_list.join(', ')}. `;
+                 }
+                  // Describe Practice/Training concisely
+                  const validPractices = Array.isArray(profile.pics_practice)
+                     ? profile.pics_practice.filter(p => !["Não pratica", "Não", "Nenhuma"].includes(p))
+                     : (typeof profile.pics_practice === 'string' && !["Não pratica", "Não", "Nenhuma"].includes(profile.pics_practice) ? [profile.pics_practice] : []);
+
+                  if (validPractices.length > 0) {
+                      textToSpeak += `Em relação à prática: ${validPractices.join(', ')}. `;
+                  } else if (profile.pics_practice && (profile.pics_practice === "Não pratica" || (Array.isArray(profile.pics_practice) && profile.pics_practice.includes("Não pratica")))) {
+                       textToSpeak += `Não pratico PICS no momento. `;
+                  } else {
+                       // If practice info is missing or unclear but they know PICS
+                       textToSpeak += `Informação sobre prática não detalhada. `;
+                  }
+
+            } else {
+                textToSpeak += `Eu não conheço PICS. `;
+            }
+
+            speakText(textToSpeak, profile.gender); // Call the TTS function
+            // --- End TTS Section ---
+        }
+
+        function removeActiveLight() {
+            // Stop speech synthesis if the light/selection is removed
+            if (activePointLight || selectedCube) { // Check selectedCube too in case light wasn't added
+                 speechSynthesis.cancel();
+            }
+            // Remove the light source from the cube and dispose of it
+            if (activePointLight && selectedCube) {
+                 selectedCube.remove(activePointLight); // Remove from parent
+                 activePointLight.dispose(); // Free up resources
+                 activePointLight = null;
+                 console.log("Removed point light.");
+            }
+             // Keep selectedCube reference until the next valid click or background click
+             // selectedCube = null; // Don't deselect here, only on background click or new selection
+        }
+
+        // Make closeModal globally accessible for the inline onclick attribute
+        window.closeModal = function() {
+            modal.style.display = 'none';
+            // Stop speech synthesis when the modal is closed manually
+            speechSynthesis.cancel();
+            // Optional: Remove the light pulse when closing modal manually
+            // removeActiveLight();
+        }
+
+        // --- Event Listeners ---
+         function onWindowResize() {
+             // Determine the actual rendering area size based on container element
+             const containerWidth = container.clientWidth;
+             const containerHeight = container.clientHeight;
+
+             if (containerWidth <= 0 || containerHeight <= 0) return; // Avoid errors if container isn't rendered yet
+
+             // Update camera aspect ratio
+             camera.aspect = containerWidth / containerHeight;
+             camera.updateProjectionMatrix();
+
+             // Update renderer size to match the container
+             renderer.setSize(containerWidth, containerHeight);
+             console.log(`Resized renderer to: ${containerWidth}x${containerHeight}`);
+
+         }
+         window.addEventListener('resize', onWindowResize);
+
+
+        // ---> REVISED Click Logic <---
+        function onClick(event) {
+    speechSynthesis.cancel();
+
+    const rect = renderer.domElement.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    if (x < 0 || x >= rect.width || y < 0 || y >= rect.height) {
+        // Clique fora do canvas: reativa todos os cubos
+        interactiveObjects.forEach(cube => {
+            cube.material.opacity = OPACITY_DEFAULT;
+            cube.material.emissive.setHex(EMISSIVE_DEFAULT);
+            cube.material.needsUpdate = true;
+        });
+        if (selectedCube) {
+            removeActiveLight();
+            selectedCube = null;
+            closeModal();
+        }
+        return;
+    }
+
+    mouse.x = (x / rect.width) * 2 - 1;
+    mouse.y = -(y / rect.height) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(interactiveObjects);
+
+    if (activePointLight) {
+        removeActiveLight();
+    }
+
+    if (intersects.length > 0) {
+        const clickedObject = intersects[0].object;
+
+        // Só permite clicar em cubos visíveis
+        if (clickedObject.material.opacity > OPACITY_UNLIT + 0.01) {
+            selectedCube = clickedObject;
+
+            // Apaga todos os cubos
+            interactiveObjects.forEach(cube => {
+                cube.material.opacity = OPACITY_UNLIT;
+                cube.material.emissive.setHex(EMISSIVE_DEFAULT);
+                cube.material.needsUpdate = true;
+            });
+
+            // Destaca apenas o cubo clicado
+            selectedCube.material.opacity = OPACITY_DEFAULT;
+            selectedCube.material.emissive.setHex(EMISSIVE_LIT);
+            selectedCube.material.needsUpdate = true;
+
+            activePointLight = new THREE.PointLight(0xffffff, 1.8, 5);
+            activePointLight.position.set(0, 0, 0);
+            selectedCube.add(activePointLight);
+
+            showModal(clickedObject.userData);
+        } else {
+            // Clique em cubo apagado: trata como clique fora
+            interactiveObjects.forEach(cube => {
+                cube.material.opacity = OPACITY_DEFAULT;
+                cube.material.emissive.setHex(EMISSIVE_DEFAULT);
+                cube.material.needsUpdate = true;
+            });
+            if (selectedCube) {
+                selectedCube = null;
+                closeModal();
+            }
+        }
+    } else {
+        // Clique no fundo: reativa todos os cubos
+        interactiveObjects.forEach(cube => {
+            cube.material.opacity = OPACITY_DEFAULT;
+            cube.material.emissive.setHex(EMISSIVE_DEFAULT);
+            cube.material.needsUpdate = true;
+        });
+        selectedCube = null;
+        closeModal();
+    }
+}
+        // Use the container element for the click listener for better encapsulation
+        container.addEventListener('click', onClick);
+
+
+        // --- Initialization ---
+        populateFilterOptions(); // Create filter checkboxes based on data
+        applyFilters();        // Apply initial (empty) filter state to set default appearance
+        onWindowResize();      // Set initial renderer size correctly based on container
+        animate();             // Start the animation loop
+
+    </script>
+	<script>
+      // Desmuta a música no primeiro clique do usuário
+      document.addEventListener('click', function enableAudioOnce() {
+        const iframe = document.getElementById('bgMusic');
+        if (iframe) {
+          // Troca o src para desmutar (YouTube não aceita volume via script externo)
+          const currentSrc = iframe.src;
+          if (currentSrc.includes('mute=1')) {
+            iframe.src = currentSrc.replace('mute=1', 'mute=0');
+          }
+          document.removeEventListener('click', enableAudioOnce);
+        }
+      });
+    </script>
+</body>
+</html>
